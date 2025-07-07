@@ -1,0 +1,49 @@
+name: 'Azure OpenAI PR Review'
+description: 'Review pull requests using Azure OpenAI'
+author: 'Mustafa Cicek'
+
+inputs:
+  azure_openai_endpoint:
+    description: 'Azure OpenAI endpoint URL'
+    required: true
+  azure_openai_api_key:
+    description: 'Azure OpenAI API key'
+    required: true
+  azure_openai_deployment_name:
+    description: 'Azure OpenAI deployment name'
+    required: true
+    default: 'gpt-4'
+  max_tokens:
+    description: 'Maximum tokens for AI response'
+    required: false
+    default: '1500'
+  temperature:
+    description: 'AI temperature setting'
+    required: false
+    default: '0.1'
+
+outputs:
+  summary:
+    description: 'Review summary'
+  score:
+    description: 'Overall score (1-10)'
+  approved:
+    description: 'Whether PR is approved'
+  comment_count:
+    description: 'Number of review comments'
+  review_result:
+    description: 'Complete review result as JSON'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  env:
+    AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
+    AZURE_OPENAI_API_KEY: ${{ inputs.azure_openai_api_key }}
+    AZURE_OPENAI_DEPLOYMENT_NAME: ${{ inputs.azure_openai_deployment_name }}
+    MAX_TOKENS: ${{ inputs.max_tokens }}
+    TEMPERATURE: ${{ inputs.temperature }}
+
+branding:
+  icon: 'eye'
+  color: 'blue'
