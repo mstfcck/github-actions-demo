@@ -1,49 +1,133 @@
+# =============================================================================
+# AZURE OPENAI PR REVIEW - CUSTOM GITHUB ACTION DEFINITION
+# =============================================================================
+# This file defines a custom GitHub Action that can be reused across repositories.
+# It follows GitHub Actions' composite action pattern using Docker containers.
+#
+# KEY CONCEPTS:
+# • Custom Action: Reusable, shareable GitHub Actions component
+# • Docker-based: Runs in isolated container for consistency and security
+# • Input/Output Contract: Well-defined interface for configuration and results
+# • Repository Integration: Can be published to GitHub Marketplace
+#
+# EXECUTION MODEL:
+# When this action is called from a workflow:
+# 1. GitHub Actions reads this metadata file
+# 2. Builds Docker image from Dockerfile
+# 3. Passes inputs as environment variables to container
+# 4. Executes Python application inside container
+# 5. Captures outputs for workflow consumption
+# =============================================================================
+
+# Basic action metadata
 name: 'Azure OpenAI PR Review'
 description: 'Review pull requests using Azure OpenAI'
 author: 'Mustafa Cicek'
 
+# =============================================================================
+# INPUT PARAMETERS
+# =============================================================================
+# These inputs define the configuration interface for the action.
+# They can be provided by the calling workflow and are passed as environment
+# variables to the Docker container.
+#
+# SECURITY MODEL:
+# • Required inputs ensure essential configuration is provided
+# • Sensitive data (API keys) should be passed via GitHub Secrets
+# • Default values provide sensible configuration for optional parameters
+# =============================================================================
 inputs:
+  # Azure OpenAI Service Configuration
+  # These are required and should come from repository secrets
   azure_openai_endpoint:
-    description: 'Azure OpenAI endpoint URL'
+    description: 'Azure OpenAI endpoint URL (e.g., https://your-resource.openai.azure.com/)'
     required: true
+  
   azure_openai_api_key:
-    description: 'Azure OpenAI API key'
+    description: 'Azure OpenAI API key for authentication'
     required: true
+  
   azure_openai_deployment_name:
-    description: 'Azure OpenAI deployment name'
+    description: 'Azure OpenAI model deployment name (e.g., gpt-4, gpt-35-turbo)'
     required: true
-    default: 'gpt-4'
+    default: 'gpt-4'  # Default to GPT-4 for best review quality
+  
+  # AI Model Parameters  
+  # These control the behavior and output of the AI model
   max_tokens:
-    description: 'Maximum tokens for AI response'
+    description: 'Maximum tokens for AI response (controls response length)'
     required: false
-    default: '1500'
+    default: '1500'   # Sufficient for detailed code reviews
+  
   temperature:
-    description: 'AI temperature setting'
+    description: 'AI temperature setting (0.0-1.0, lower = more focused/consistent)'
     required: false
-    default: '0.1'
+    default: '0.1'    # Low temperature for consistent, professional reviews
 
+# =============================================================================
+# OUTPUT PARAMETERS  
+# =============================================================================
+# These outputs are available to subsequent workflow steps after this action
+# completes. They provide both summary information and detailed structured data.
+#
+# USAGE IN WORKFLOWS:
+# • Individual outputs: ${{ steps.review.outputs.summary }}
+# • JSON output: ${{ steps.review.outputs.review_result }}
+# • Conditional logic: ${{ steps.review.outputs.approved == 'true' }}
+# =============================================================================
 outputs:
+  # Summary outputs for quick access
   summary:
-    description: 'Review summary'
+    description: 'Brief review summary from AI analysis'
+  
   score:
-    description: 'Overall score (1-10)'
+    description: 'Overall score (1-10) representing code quality assessment'
+  
   approved:
-    description: 'Whether PR is approved'
+    description: 'Boolean indicating whether PR is approved (true/false)'
+  
   comment_count:
-    description: 'Number of review comments'
+    description: 'Number of specific review comments generated'
+  
+  # Complete structured output
   review_result:
-    description: 'Complete review result as JSON'
+    description: 'Complete review result as JSON containing all details'
 
+# =============================================================================
+# EXECUTION CONFIGURATION
+# =============================================================================
+# Defines how GitHub Actions should execute this custom action.
+#
+# DOCKER EXECUTION MODEL:
+# • using: 'docker' - Tells GitHub Actions to run in Docker container
+# • image: 'Dockerfile' - References local Dockerfile for container build
+# • env: - Maps action inputs to environment variables in container
+#
+# ENVIRONMENT VARIABLE MAPPING:
+# Action inputs → Environment variables → Python application configuration
+# This provides secure, isolated configuration passing.
+# =============================================================================
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
+  using: 'docker'                    # Use Docker container execution
+  image: 'Dockerfile'                # Build container from local Dockerfile
+  
+  # Environment variable mapping
+  # These map action inputs to environment variables that the Python app reads
   env:
+    # Azure OpenAI Configuration
     AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
     AZURE_OPENAI_API_KEY: ${{ inputs.azure_openai_api_key }}
     AZURE_OPENAI_DEPLOYMENT_NAME: ${{ inputs.azure_openai_deployment_name }}
+    
+    # AI Model Parameters
     MAX_TOKENS: ${{ inputs.max_tokens }}
     TEMPERATURE: ${{ inputs.temperature }}
 
+# =============================================================================
+# GITHUB MARKETPLACE BRANDING
+# =============================================================================
+# Visual appearance when published to GitHub Actions Marketplace
+# =============================================================================
 branding:
-  icon: 'eye'
-  color: 'blue'
+  icon: 'eye'       # Eye icon representing "review" functionality
+  color: 'blue'     # Blue color theme matching Azure branding

@@ -1,57 +1,168 @@
+# =============================================================================
+# AZURE OPENAI PR REVIEW WORKFLOW
+# =============================================================================
+# This GitHub Actions workflow automatically reviews Pull Requests using Azure OpenAI.
+# 
+# WORKFLOW TRIGGER:
+# ----------------
+# Executes when a Pull Request is:
+# • opened (first time created)
+# • synchronize (new commits pushed)  
+# • reopened (closed PR reopened)
+#
+# EXECUTION FLOW:
+# --------------
+# 1. GitHub Event → 2. Workflow Trigger → 3. Docker Action → 4. Python App → 
+# 5. Azure OpenAI Analysis → 6. Structured Results → 7. PR Comment
+#
+# SECURITY MODEL:
+# --------------
+# • Repository secrets store Azure OpenAI credentials securely
+# • Workflow has minimal required permissions (read contents, write comments)
+# • No secrets exposed in logs or outputs
+# =============================================================================
+
 name: PR Review with Azure OpenAI
 
+# =============================================================================
+# EVENT TRIGGER CONFIGURATION
+# =============================================================================
+# This workflow responds to specific Pull Request events:
+# • opened: When a new PR is created
+# • synchronize: When new commits are pushed to an existing PR  
+# • reopened: When a previously closed PR is reopened
+# =============================================================================
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# Add permissions for the workflow
+# =============================================================================
+# GITHUB TOKEN PERMISSIONS
+# =============================================================================
+# Explicitly define minimal required permissions for security:
+# • contents: read     - Access repository files for analysis
+# • pull-requests: write - Comment on the PR with review results
+# • issues: write      - Create comments (PRs are special issues in GitHub API)
+# 
+# Note: These permissions are granted to the GITHUB_TOKEN automatically
+# provided by GitHub Actions, not user credentials.
+# =============================================================================
 permissions:
   contents: read
   pull-requests: write
   issues: write
 
 jobs:
+  # ===========================================================================
+  # AI REVIEW JOB
+  # ===========================================================================
+  # Main job that orchestrates the entire AI review process
+  # ===========================================================================
   ai-review:
     runs-on: ubuntu-latest
     name: AI Code Review
     
     steps:
+      # -----------------------------------------------------------------------
+      # STEP 1: REPOSITORY CHECKOUT
+      # -----------------------------------------------------------------------
+      # Downloads repository content so the action can access:
+      # • Source code files for analysis
+      # • The custom action definition (action.yml)
+      # • Dockerfile for containerized execution
+      #
+      # fetch-depth: 0 ensures full git history is available
+      # -----------------------------------------------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
+      # -----------------------------------------------------------------------
+      # STEP 2: EXECUTE CUSTOM AZURE OPENAI ACTION
+      # -----------------------------------------------------------------------
+      # Runs our custom Docker action defined in ./action.yml
+      # 
+      # INPUT FLOW:
+      # • Repository secrets → Workflow inputs → Action environment variables → Python app
+      # 
+      # SECURITY NOTE:
+      # • Secrets are injected as environment variables in the Docker container
+      # • Never logged or exposed in GitHub Actions UI
+      # • Automatically masked in any output
+      #
+      # OUTPUT CAPTURE:
+      # • Results are captured with id: review for use in subsequent steps
+      # • Outputs include: summary, score, approved, review_result (JSON)
+      # -----------------------------------------------------------------------
       - name: Azure OpenAI PR Review
         id: review
-        uses: ./
+        uses: ./  # Reference to local action.yml file
         with:
+          # Azure OpenAI Service Configuration (from repository secrets)
           azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           azure_openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
           azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-          max_tokens: '1500'
-          temperature: '0.1'
+          
+          # AI Model Parameters (configurable)
+          max_tokens: '1500'    # Maximum response length
+          temperature: '0.1'    # Low temperature for consistent, focused reviews
       
+      # -----------------------------------------------------------------------
+      # STEP 3: POST AI REVIEW RESULTS TO PULL REQUEST
+      # -----------------------------------------------------------------------
+      # Takes the structured JSON output from the AI review and formats it
+      # as a human-readable comment on the Pull Request.
+      #
+      # EXECUTION CONDITIONS:
+      # • if: always() ensures this step runs even if the review step fails
+      # • Provides fallback error handling and user communication
+      #
+      # GITHUB SCRIPT ACTION:
+      # • Uses actions/github-script@v7 for GitHub API interaction
+      # • Provides github REST API client and context objects
+      # • Handles authentication automatically with GITHUB_TOKEN
+      #
+      # ERROR HANDLING STRATEGY:
+      # • Primary: Parse review results and create formatted comment
+      # • Fallback: If formatting fails, post basic error message with available data
+      # • Ultimate: If all fails, set workflow status to failed
+      # -----------------------------------------------------------------------
       - name: Comment on PR
-        if: always()
+        if: always()  # Run even if previous steps fail
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}  # GitHub API authentication
           script: |
             try {
+              // ================================================================
+              // PRIMARY COMMENT CREATION LOGIC
+              // ================================================================
+              // Parse the structured JSON output from the AI review step
               const reviewResult = JSON.parse('${{ steps.review.outputs.review_result }}');
               
+              // Build formatted comment using GitHub Markdown with emojis for visual appeal
               let commentBody = `## 🤖 AI Code Review\n\n`;
+              
+              // Header with overall assessment
               commentBody += `**Overall Score:** ${reviewResult.overall_score}/10\n`;
               commentBody += `**Status:** ${reviewResult.approved ? '✅ Approved' : '❌ Changes Requested'}\n\n`;
+              
+              // AI-generated summary section
               commentBody += `### Summary\n${reviewResult.summary}\n\n`;
               
+              // Detailed comments section (if any specific feedback provided)
               if (reviewResult.comments && reviewResult.comments.length > 0) {
                 commentBody += `### Comments\n\n`;
                 
+                // Process each comment with severity-based emoji indicators
                 for (const comment of reviewResult.comments) {
-                  const emoji = comment.severity === 'error' ? '❌' : 
-                               comment.severity === 'warning' ? '⚠️' : 'ℹ️';
+                  // Visual indicators based on severity level
+                  const emoji = comment.severity === 'error' ? '❌' :     // Critical issues
+                               comment.severity === 'warning' ? '⚠️' :   // Potential problems  
+                               'ℹ️';                                     // Informational
                   
+                  // Format comment location (file:line or just file or general)
                   if (comment.filename && comment.line_number) {
                     commentBody += `${emoji} **${comment.filename}:${comment.line_number}**\n`;
                   } else if (comment.filename) {
@@ -60,25 +171,34 @@ jobs:
                     commentBody += `${emoji} **General**\n`;
                   }
                   
+                  // Add the actual feedback message with proper indentation
                   commentBody += `  ${comment.message}\n\n`;
                 }
               }
               
+              // Footer attribution
               commentBody += `---\n*Generated by Azure OpenAI PR Review Agent*`;
               
+              // ================================================================
+              // POST COMMENT TO PULL REQUEST
+              // ================================================================
+              // Use GitHub REST API to create comment on the PR
               await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: commentBody
+                issue_number: context.issue.number,    // PR number (PRs are issues in GitHub API)
+                owner: context.repo.owner,             // Repository owner
+                repo: context.repo.repo,               // Repository name
+                body: commentBody                      // Formatted comment content
               });
               
               console.log('✅ Review comment posted successfully');
               
             } catch (error) {
+              // ================================================================
+              // ERROR HANDLING AND FALLBACK LOGIC
+              // ================================================================
               console.error('❌ Error posting review comment:', error);
               
-              // Try to post a fallback comment
+              // Attempt to post a basic fallback comment with minimal information
               try {
                 await github.rest.issues.createComment({
                   issue_number: context.issue.number,
@@ -87,6 +207,7 @@ jobs:
                   body: `## 🤖 AI Code Review\n\n❌ **Error:** Could not complete the review due to a technical issue.\n\nReview Score: ${{ steps.review.outputs.score }}/10\n\n---\n*Generated by Azure OpenAI PR Review Agent*`
                 });
               } catch (fallbackError) {
+                // If even the fallback fails, log error and fail the workflow
                 console.error('❌ Failed to post fallback comment:', fallbackError);
                 core.setFailed('Failed to post review comment');
               }
