@@ -20,10 +20,11 @@ def slow_function(data):
                 result.append(i)
     return result
 
-# Add a sample function to demonstrate the AI review
-def sample_function():
-    # This function is intentionally left empty for the AI to analyze
-    pass
+# Add a badly implemented function to demonstrate the AI review
+def badly_implemented_function(data):
+    # BUG: No return statement
+    for item in data:
+        print(item)
 
 # TODO: Add error handling
 # TODO: Add input validation
