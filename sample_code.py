@@ -20,10 +20,16 @@ def slow_function(data):
                 result.append(i)
     return result
 
-# Add a sample function to demonstrate the AI review
-def sample_function():
-    # This function is intentionally left empty for the AI to analyze
-    pass
+# Add a really complex function to test AI capabilities
+def sample_function(data):
+    # This function performs a series of complex transformations on the input data
+    transformed = []
+    for item in data:
+        if isinstance(item, dict):
+            # Perform some complex logic
+            new_item = {k: v * 2 for k, v in item.items() if isinstance(v, int)}
+            transformed.append(new_item)
+    return transformed
 
 # TODO: Add error handling
 # TODO: Add input validation
