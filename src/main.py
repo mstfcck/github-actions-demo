@@ -110,22 +110,7 @@ def _output_results(result):
         "comment_count": len(result.comments)
     }
     
-    # Set GitHub Actions outputs
-    github_output = os.getenv("GITHUB_OUTPUT")
-    if github_output:
-        with open(github_output, "a") as f:
-            for key, value in outputs.items():
-                f.write(f"{key}={value}\\n")
-    
-    # Create review comment for PR
-    comment_body = _format_review_comment(result)
-    
-    # In real implementation, post comment using GitHub API
-    # For now, just log it
-    logger.info("Review comment:")
-    logger.info(comment_body)
-    
-    # Also output as JSON for potential processing
+    # Create JSON result for detailed output
     result_json = {
         "summary": result.summary,
         "overall_score": result.overall_score,
@@ -141,7 +126,26 @@ def _output_results(result):
         ]
     }
     
-    print(f"::set-output name=review_result::{json.dumps(result_json)}")
+    # Set GitHub Actions outputs (new method)
+    github_output = os.getenv("GITHUB_OUTPUT")
+    if github_output:
+        with open(github_output, "a") as f:
+            for key, value in outputs.items():
+                f.write(f"{key}={value}\n")
+            # Add the JSON result
+            f.write(f"review_result={json.dumps(result_json)}\n")
+    else:
+        # Fallback for local testing
+        for key, value in outputs.items():
+            print(f"{key}={value}")
+        print(f"review_result={json.dumps(result_json)}")
+    
+    # Create review comment for PR
+    comment_body = _format_review_comment(result)
+    
+    # Log the review comment
+    logger.info("Review comment:")
+    logger.info(comment_body)
 
 
 def _format_review_comment(result) -> str:
