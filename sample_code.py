@@ -20,6 +20,11 @@ def slow_function(data):
                 result.append(i)
     return result
 
+# Add a sample function to demonstrate the AI review
+def sample_function():
+    # This function is intentionally left empty for the AI to analyze
+    pass
+
 # TODO: Add error handling
 # TODO: Add input validation
 # TODO: Optimize performance
